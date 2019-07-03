@@ -1,0 +1,4 @@
+resource "aws_key_pair" "kpu" {
+  key_name   = "kpu"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAoojMrrpD2Gr2sv6s5k+WzlWfwQA5YR0LLaQ+jrCl5VruHzXhV9MCOf4AM5LZE41xy4CjP3PaiTaaaBNA7WcMHK5RpAvM2TZcjqs4heCoPg/JVWuuYHD2iANGdqGhNCQ/ZU1qarw6o8VvaDCA7McKeJ7oWy/+xo049HUja6SAs/LlBiEHHIabodaEXBaO0vlC4x49QQ5+PiV6+enYQQMtKEy+K1P634uDhph5KStldxHqQdK4kC34Q9RrpzJ/1O9XtltC06A1ugxcJWFYt8YihIJdXJw5Q6GT2BxbkaILvqyN4mNTKM/uY5dp1hcUazofImSY4ShZc5jDVwvCcKMI1Q== kpucynski@kpucynski-desktop"
+}
