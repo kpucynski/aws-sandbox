@@ -17,7 +17,7 @@ ec2-describe-instance() {
    aws ec2 describe-instances --filter "Name=instance-id,Values=$i" --query "Reservations[*].Instances[*].$1" --output text
 }
 
-echo "Performing rolling upgrade $OLD_AMI_ID to $NEW_AMI_ID"
+echo "Performing rolling upgrade from $OLD_AMI_ID to $NEW_AMI_ID"
 
 for i in $ELB_INSTANCES; do
     echo "Gathering information about $i"
@@ -47,6 +47,7 @@ for i in $ELB_INSTANCES; do
         do
             STATUS="$(aws elb describe-instance-health --load-balancer-name $LB_NAME --instances $NEW_I --query 'InstanceStates[].State' --output text)"
             if [ "$STATUS" = "InService" ]; then
+                echo "Instance status: $STATUS, moving forward."
                 break
             fi
             N=$[$N+1]

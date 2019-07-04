@@ -5,14 +5,15 @@ set -euo pipefail
 LB_NAME=elb
 
 ELB_DNS=$(aws elb describe-load-balancers --load-balancer-name $LB_NAME --query 'LoadBalancerDescriptions[].DNSName' --output text)
-ELB_INSTANCES=$(aws elb describe-load-balancers --load-balancer-name $LB_NAME --query 'LoadBalancerDescriptions[].Instances' --output text)
 
 ec2-describe-instance() {
     aws ec2 describe-instances --filter "Name=instance-id,Values=$i" --query "Reservations[*].Instances[*].$1" --output text
 }
 
 match_instances() {
-    MATCH_AMI=$1
+   ELB_INSTANCES=$(aws elb describe-load-balancers --load-balancer-name $LB_NAME --query 'LoadBalancerDescriptions[].Instances' --output text)
+
+   MATCH_AMI=$1
 
     for i in $ELB_INSTANCES; do
         AMI=""
@@ -55,9 +56,10 @@ test_deploy() {
     match_instances $NEW_AMI
 }
 
-# Ubuntu 16.04 -> 18.04
+echo "Testing Ubuntu 16.04 -> 18.04"
 test_deploy ami-03746875d916becc0 ami-01e6a0b85de033c99
 
-# Ubuntu 18.04 -> 16.04
-#test_deploy ami-01e6a0b85de033c99 ami-03746875d916becc0
+echo "Testing Ubuntu 18.04 -> 16.04"
+test_deploy ami-01e6a0b85de033c99 ami-03746875d916becc0
 
+echo "Done."
