@@ -1,0 +1,69 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [ $# -ne 2 ]; then
+    echo "Usage $0 <OLD_AMI_ID> <NEW_AMI_ID>"
+    exit 1
+fi
+
+OLD_AMI_ID=$1
+NEW_AMI_ID=$2
+LB_NAME="elb"
+
+ELB_INSTANCES=$(aws elb describe-load-balancers --load-balancer-name $LB_NAME --query 'LoadBalancerDescriptions[].Instances' --output text)
+
+ec2-describe-instance() {
+   aws ec2 describe-instances --filter "Name=instance-id,Values=$i" --query "Reservations[*].Instances[*].$1" --output text
+}
+
+echo "Performing rolling upgrade $OLD_AMI_ID to $NEW_AMI_ID"
+
+for i in $ELB_INSTANCES; do
+    echo "Gathering information about $i"
+
+    AMI_ID=$(ec2-describe-instance ImageId)
+
+    if [ $AMI_ID = $OLD_AMI_ID ]; then
+        echo "Upgrading $i"
+
+        TYPE=$(ec2-describe-instance InstanceType)
+        AZ=$(ec2-describe-instance Placement.AvailabilityZone)
+        SUBNET=$(ec2-describe-instance SubnetId)
+        SG=$(ec2-describe-instance "SecurityGroups[*].GroupId")
+        KEY=$(ec2-describe-instance KeyName)
+        
+        echo "Running instance with $NEW_AMI_ID"
+
+        NEW_I=$(aws ec2 run-instances --image-id $NEW_AMI_ID --instance-type $TYPE --key-name $KEY --placement "AvailabilityZone=$AZ" --security-group-ids $SG --subnet-id $SUBNET --user-data file://userdata.sh | jq -r ".Instances[] | .InstanceId")
+
+        echo "Registering $NEW_I to $LB_NAME"
+        aws elb register-instances-with-load-balancer --load-balancer-name $LB_NAME --instances $NEW_I > /dev/null
+
+        echo "Waiting for $NEW_I to be healty"
+        N=3
+        STATUS=""
+        until [ $N -ge 60 ]
+        do
+            STATUS="$(aws elb describe-instance-health --load-balancer-name $LB_NAME --instances $NEW_I --query 'InstanceStates[].State' --output text)"
+            if [ "$STATUS" = "InService" ]; then
+                break
+            fi
+            N=$[$N+1]
+            echo "Instance status: $STATUS, waiting $N second(s)"
+            sleep $N
+        done        
+
+        echo "Deregistering $i from $LB_NAME"
+      
+        aws elb deregister-instances-from-load-balancer --load-balancer-name $LB_NAME --instances $i > /dev/null
+       
+        echo "Terminating $i with $AMI_ID"
+
+        aws ec2 terminate-instances --instance-ids $i > /dev/null
+    else
+        echo "Nothing to do here."
+    fi;
+done;
+
+echo "Done;"

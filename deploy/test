@@ -1,0 +1,63 @@
+#!/bin/bash
+
+set -euo pipefail
+
+LB_NAME=elb
+
+ELB_DNS=$(aws elb describe-load-balancers --load-balancer-name $LB_NAME --query 'LoadBalancerDescriptions[].DNSName' --output text)
+ELB_INSTANCES=$(aws elb describe-load-balancers --load-balancer-name $LB_NAME --query 'LoadBalancerDescriptions[].Instances' --output text)
+
+ec2-describe-instance() {
+    aws ec2 describe-instances --filter "Name=instance-id,Values=$i" --query "Reservations[*].Instances[*].$1" --output text
+}
+
+match_instances() {
+    MATCH_AMI=$1
+
+    for i in $ELB_INSTANCES; do
+        AMI=""
+        STATUS=""
+
+        AMI=$(ec2-describe-instance ImageId)
+        STATUS=$(aws elb describe-instance-health --load-balancer-name $LB_NAME --instances $i --query 'InstanceStates[].State' --output text)
+
+        echo -n "Instance: $i, $AMI, $STATUS: "
+        if [ ! $AMI = $MATCH_AMI ]; then
+            echo Fail, expected AMI $MATCH_AMI
+            exit 1
+        fi
+
+        if [ ! $STATUS = 'InService' ]; then
+            echo Fail, expected status InService
+            exit 1
+        fi
+
+        echo OK.
+    done;
+}
+
+test_deploy() {
+    OLD_AMI=$1
+    NEW_AMI=$2
+
+    echo -n "ELB check: "
+    HTTP_CODE=$(curl -s -w%{http_code} -o /dev/null $ELB_DNS)
+    if [ $HTTP_CODE = 200 ]; then
+        echo $HTTP_CODE OK
+    else
+        echo $HTTP_CODE Fail
+    fi
+
+    match_instances $OLD_AMI
+
+    ./deploy $OLD_AMI $NEW_AMI
+
+    match_instances $NEW_AMI
+}
+
+# Ubuntu 16.04 -> 18.04
+test_deploy ami-03746875d916becc0 ami-01e6a0b85de033c99
+
+# Ubuntu 18.04 -> 16.04
+#test_deploy ami-01e6a0b85de033c99 ami-03746875d916becc0
+
